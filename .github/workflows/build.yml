@@ -1,0 +1,98 @@
+name: build
+
+on:
+  schedule:
+    - cron: '17 5 * * *'      # daily: pick up new Arch qemu versions and new upstream commits
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Rebuild even if a release for this Arch version + upstream commit exists'
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: [PKGBUILD, sync-arch.sh, build.sh, .github/workflows/build.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    outputs:
+      build: ${{ steps.v.outputs.build }}
+      tag: ${{ steps.v.outputs.tag }}
+    steps:
+      - name: Prepare Arch container
+        run: pacman -Syu --noconfirm git github-cli
+      - uses: actions/checkout@v4
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          ./sync-arch.sh
+          tag=$(cat release.tag)
+          build=true
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+             && [ "$FORCE" != "true" ] && [ "${{ github.event_name }}" = "schedule" ]; then
+            build=false
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag build=$build"
+
+  build:
+    needs: check
+    if: needs.check.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Prepare Arch container
+        run: |
+          pacman -Syu --noconfirm git sudo gnupg
+          useradd -m builder
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+      - uses: actions/checkout@v4
+      - name: Sync with Arch qemu
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          ./sync-arch.sh
+          if [ "$(cat release.tag)" != "${{ needs.check.outputs.tag }}" ]; then
+            echo "Arch or upstream changed between jobs, rerun the workflow" >&2
+            exit 1
+          fi
+      - name: Build package
+        run: |
+          chown -R builder:builder .
+          for k in $(cat arch.keys); do
+            su builder -c "gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys $k || gpg --keyserver hkps://keys.openpgp.org --recv-keys $k"
+          done
+          su builder -c "makepkg -sf --noconfirm"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: '*.pkg.tar.zst'
+          if-no-files-found: error
+
+  release:
+    needs: [check, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.check.outputs.tag }}
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" ./*.pkg.tar.zst --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" ./*.pkg.tar.zst --repo "$GITHUB_REPOSITORY" \
+              --title "$TAG" \
+              --notes "QEMU as currently shipped by Arch (${TAG#arch-}) with qemus/qemu-vmvga overlaid. Install: sudo pacman -U <file>"
+          fi
