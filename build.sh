@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-./sync-arch.sh
+bash ./sync-arch.sh
 
 while read -r key; do
   [[ -n $key ]] || continue
