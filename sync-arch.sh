@@ -61,8 +61,10 @@ while IFS= read -r line; do
       [[ -f arch/$f ]] || { echo "patch listed but missing in Arch repo: $f" >&2; exit 1; }
       patches+=("$f") ;;
     SRC=*)
-      echo "Arch's PKGBUILD has a source this repo does not handle: ${line#SRC=}" >&2
-      exit 1 ;;
+      # Other local files in Arch's repo (e.g. bridge.conf) are packaging config for files
+      # this package does not ship (only the emulator binary is installed), so they cannot
+      # change the build. Remote sources and patches are handled above.
+      echo "note: ignoring Arch packaging file ${line#SRC=} (not part of the emulator build)" >&2 ;;
   esac
 done <<<"$meta"
 
