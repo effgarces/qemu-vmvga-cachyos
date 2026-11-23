@@ -1,0 +1,13 @@
+post_install() {
+  cat <<'EOF'
+==> qemu-vmvga is installed in /opt/qemu-vmvga (the stock qemu is untouched).
+    The device is named "vmvga":  -device vmvga   (not -vga vmware / vmware-svga)
+    Start the machine with the VMware backdoor port: -machine ...,vmport=on
+    Host KVM needs:  options kvm enable_vmware_backdoor=Y   (reboot or reload kvm)
+    3D needs the dxvk-native package and a Vulkan GPU. libvirt XML: see the README.
+EOF
+}
+
+post_upgrade() {
+  post_install
+}

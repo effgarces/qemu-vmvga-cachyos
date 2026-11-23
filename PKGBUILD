@@ -30,18 +30,19 @@ depends=(
   glib2 pixman libslirp libaio liburing libusb usbredir spice sdl2 gtk3
   libepoxy mesa libcap-ng libseccomp gnutls snappy lzo zstd libjpeg-turbo
   libpng libpulse dtc
-  qemu-common qemu-system-x86-firmware
+  qemu-common qemu-system-x86-firmware seabios
 )
 makedepends=(
   git meson ninja python python-distlib python-setuptools python-pip
   spice-protocol glib2-devel
 )
 optdepends=(
-  'dxvk: Direct3D 9-11 acceleration through the host GPU (needs a Vulkan-capable GPU)'
+  'dxvk-native: Direct3D 9-11 acceleration through the host GPU (upstream requires this one, not the Wine "dxvk")'
   'vulkan-driver: required for the DXVK-backed 3D path'
   'edk2-ovmf: UEFI firmware for guests'
 )
 options=(!lto)
+install=qemu-vmvga.install
 source=("https://download.qemu.org/qemu-${_qemuver}.tar.xz"
         "https://download.qemu.org/qemu-${_qemuver}.tar.xz.sig"
         "qemu-vmvga::git+https://github.com/qemus/qemu-vmvga.git")
@@ -103,6 +104,15 @@ build() {
     --disable-werror
 
   make
+
+  # Smoke test: the package is useless without the device. Upstream registers it as
+  # "vmvga" (used as -device vmvga); fail the build here if that ever changes.
+  local devs
+  devs=$(./qemu-system-x86_64 -device help 2>&1) || true
+  if ! grep -q '"vmvga"' <<<"$devs"; then
+    echo 'ERROR: built qemu-system-x86_64 does not provide the "vmvga" device' >&2
+    return 1
+  fi
 }
 
 package() {
