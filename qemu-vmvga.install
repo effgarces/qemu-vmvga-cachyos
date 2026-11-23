@@ -4,7 +4,9 @@ post_install() {
     The device is named "vmvga":  -device vmvga   (not -vga vmware / vmware-svga)
     Start the machine with the VMware backdoor port: -machine ...,vmport=on
     Host KVM needs:  options kvm enable_vmware_backdoor=Y   (reboot or reload kvm)
-    3D needs the dxvk-native package and a Vulkan GPU. libvirt XML: see the README.
+    3D needs the dxvk-native package and a Vulkan GPU.
+    Built without SDL and OpenGL on purpose: set <gl enable='no'/> on a SPICE display.
+    libvirt XML: see the README.
 EOF
 }
 

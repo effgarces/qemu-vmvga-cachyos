@@ -27,8 +27,8 @@ arch=(x86_64)
 url='https://github.com/qemus/qemu-vmvga'
 license=(GPL-2.0-or-later)
 depends=(
-  glib2 pixman libslirp libaio liburing libusb usbredir spice sdl2 gtk3
-  libepoxy mesa libcap-ng libseccomp gnutls snappy lzo zstd libjpeg-turbo
+  glib2 pixman libslirp libaio liburing libusb usbredir spice gtk3
+  libcap-ng libseccomp gnutls snappy lzo zstd libjpeg-turbo
   libpng libpulse dtc
   qemu-common qemu-system-x86-firmware seabios
 )
@@ -90,8 +90,9 @@ build() {
     --enable-slirp \
     --enable-spice \
     --enable-gtk \
-    --enable-sdl \
-    --enable-opengl \
+    --disable-sdl \
+    --disable-sdl-image \
+    --disable-opengl \
     --enable-usb-redir \
     --enable-linux-aio \
     --enable-linux-io-uring \
@@ -111,6 +112,15 @@ build() {
   devs=$(./qemu-system-x86_64 -device help 2>&1) || true
   if ! grep -q '"vmvga"' <<<"$devs"; then
     echo 'ERROR: built qemu-system-x86_64 does not provide the "vmvga" device' >&2
+    return 1
+  fi
+
+  # Upstream's DXVK glue fakes libSDL2 in memory and refuses to start when the real
+  # libSDL2 is already loaded ("cannot replace an already loaded libSDL2-2.0.so.0"),
+  # so the binary must not link SDL2, directly or through another library.
+  if ldd ./qemu-system-x86_64 | grep -q 'libSDL2'; then
+    echo 'ERROR: qemu-system-x86_64 links libSDL2, which breaks the vmvga 3D path' >&2
+    ldd ./qemu-system-x86_64 | grep 'libSDL2' >&2
     return 1
   fi
 }

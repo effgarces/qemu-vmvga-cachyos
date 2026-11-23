@@ -83,6 +83,16 @@ device is set to `none`. Use `virsh edit <vm>` (virt-manager's XML editor may dr
 </domain>
 ```
 
+If the VM has a SPICE display, turn its OpenGL off (this binary is built without OpenGL, and vmvga does
+not use GL scanout; with GL on, QEMU crashes in libepoxy or refuses to start):
+
+```xml
+<graphics type='spice'>
+  <listen type='none'/>
+  <gl enable='no'/>
+</graphics>
+```
+
 The emulator is also on PATH as `qemu-vmvga-system-x86_64`.
 
 ## How tracking works
@@ -109,8 +119,9 @@ builds as upgrades.
 
 - Upstream's overlay targets a specific QEMU version. When Arch moves to a version the overlay does
   not support yet, that day's build fails and the previous release stays available.
-- The build ends with a smoke test that fails if the binary has no `vmvga` device, so an upstream
-  rename cannot silently produce a useless package.
+- The build ends with two checks: the binary must have the `vmvga` device, and it must not link
+  libSDL2 (upstream's DXVK glue replaces SDL2 in memory and refuses to run next to the real one).
+  For that reason QEMU is configured with `--disable-sdl --disable-opengl`; GTK, SPICE and VNC remain.
 - `build.sh` locally reads the version from your pacman sync databases (as of your last
   `pacman -Sy`). If your CachyOS repos carry a different qemu than Arch, the Arch tag clone fails;
   set `ARCH_QEMU_VERSION=<ver>-<rel>` to force a tag.
